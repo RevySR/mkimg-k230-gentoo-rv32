@@ -30,7 +30,7 @@ jobs:
       fail-fast: false
       matrix:
         model: [canmv, evb]
-        distro: [revyos, debian]
+        distro: [gentoo_musl_rv32]
         abi: [rv64]
 
     runs-on: ubuntu-22.04
@@ -116,9 +116,6 @@ jobs:
               echo "RELEASE_ID=${{ github.ref_name }}" >> revyos-release
               echo "COMMIT_ID=${{ github.sha }}" >> revyos-release
               echo "RUNNER_ID=${{ github.run_id }}" >> revyos-release
-
-              # workaround for
-              sed -i "s#deb http#deb [trusted=yes] http#g" ./build.sh
 
               sudo -E --preserve-env=PATH bash ./build.sh build all
               # fix permissions
