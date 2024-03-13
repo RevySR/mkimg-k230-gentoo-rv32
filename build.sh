@@ -12,7 +12,7 @@ ARCH=${ARCH:-riscv}
 CROSS_COMPILE=${CROSS_COMPILE:-riscv64-unknown-linux-gnu-}
 TIMESTAMP=${TIMESTAMP:-$(date +%Y%m%d-%H%M%S)}
 
-DISTRO=${DISTRO:-revyos} # revyos or debian
+DISTRO=${DISTRO:-gentoo_musl_rv32} # yocto_rv32 / fedora_rv32 / gentoo_musl_rv32 / fedora_rv64
 CHROOT_TARGET=${CHROOT_TARGET:-target}
 ROOTFS_IMAGE_SIZE=2G
 ROOTFS_IMAGE_FILE="k230_root.ext4"
@@ -76,59 +76,31 @@ function build_uboot() {
 }
 
 function build_rootfs() {
-  truncate -s ${ROOTFS_IMAGE_SIZE} ${OUTPUT_DIR}/${ROOTFS_IMAGE_FILE}
-  mkfs.ext4 -F -L rootfs ${OUTPUT_DIR}/${ROOTFS_IMAGE_FILE}
-
-  mount ${OUTPUT_DIR}/${ROOTFS_IMAGE_FILE} ${CHROOT_TARGET}
-
-  if [[ $DISTRO == "revyos" ]]; then
-    mmdebstrap --architectures=riscv64 \
-    --include="ca-certificates locales dosfstools bash iperf3 revyos-keyring \
-        sudo bash-completion network-manager openssh-server systemd-timesyncd cloud-utils" \
-    sid "$CHROOT_TARGET" \
-    "deb https://mirror.iscas.ac.cn/revyos/revyos-addons/ revyos-addons main" \
-    "deb https://mirror.iscas.ac.cn/revyos/revyos-base/ sid main contrib non-free non-free-firmware" 
-  else
-    mmdebstrap --architectures=riscv64 \
-    --include="ca-certificates locales dosfstools bash iperf3 debian-keyring \
-        sudo bash-completion network-manager openssh-server systemd-timesyncd cloud-utils" \
-    sid "$CHROOT_TARGET" \
-    "deb https://deb.debian.org/debian/ sid main contrib non-free non-free-firmware"
-  fi
-
-  chroot $CHROOT_TARGET /bin/bash <<EOF
-# apt update
-sed -i 's#deb [trusted=yes] http#deb http#g' /etc/apt/sources.list
-apt update
-
-# Add user
-useradd -m -s /bin/bash -G adm,sudo debian
-echo 'debian:debian' | chpasswd
-
-# Change hostname
-echo ${DISTRO}-${BOARD} > /etc/hostname
-echo 127.0.1.1 ${DISTRO}-${BOARD} >> /etc/hosts
-
-# Disable iperf3
-systemctl disable iperf3
-
-# Set default timezone to Asia/Shanghai
-ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
-echo "Asia/Shanghai" > /etc/timezone
-
-exit
-EOF
-
-  if [ ! -f revyos-release ]; then
-    echo "$TIMESTAMP" > $CHROOT_TARGET/etc/revyos-release
-  else
-    cp -v revyos-release $CHROOT_TARGET/etc/revyos-release
-  fi
-
-  # clean source
-  rm -vrf $CHROOT_TARGET/var/lib/apt/lists/*
-
-  umount ${CHROOT_TARGET}
+  pushd ${OUTPUT_DIR}
+  {
+    if [[ $DISTRO == "fedora_rv32" ]]; then
+      curl -OL https://github.com/ruyisdk/mkimg-k230-rv64ilp32/releases/download/fedora_rv32_rootfs/root.ext4.zst
+      unzstd root.ext4.zst
+      mv root.ext4 ${ROOTFS_IMAGE_FILE}
+    elif [[ $DISTRO == "yocto_rv32" ]]; then
+      curl -OL https://github.com/ruyisdk/mkimg-k230-rv64ilp32/releases/download/fedora_rv32_rootfs/core-image-minimal-qemuriscv32.rootfs-20240302042035.ext4.zst
+      unzstd core-image-minimal-qemuriscv32.rootfs-20240302042035.ext4.zst
+      mv core-image-minimal-qemuriscv32.rootfs-20240302042035.ext4 ${ROOTFS_IMAGE_FILE}
+    elif [[ $DISTRO == "fedora_rv64" ]]; then
+      curl -OL https://github.com/ruyisdk/mkimg-k230-rv64ilp32/releases/download/fedora_rv32_rootfs/root-lp64.ext4.zst
+      unzstd root-lp64.ext4.zst
+      mv root-lp64.ext4 ${ROOTFS_IMAGE_FILE}
+    elif [[ $DISTRO == "gentoo_musl_rv32" ]]; then
+      curl -OL https://github.com/RevySR/mkimg-k230-gentoo-rv32/releases/download/rootfs/root_gentoo_musl32.ext4.zst
+      unzstd root_gentoo_musl32.ext4.zst
+      mv root_gentoo_musl32.ext4 ${ROOTFS_IMAGE_FILE}
+    else
+      echo "DISTRO: ${DISTRO} ?????"
+      exit 1
+    fi
+  }
+  popd
+  
 }
 
 function build_img() {
